@@ -1,0 +1,18 @@
+---
+title: "ADS503 Final Project"
+author: "Stephanie Smith, James Shoenhair, Ramin Fazli, Veronica Burke"
+date: "2026-06-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Data & Gather Preliminary Information
+
+```{r}
+# Load Census Income Data
+data <- read_csv("Users/vrb/Downloads/census+income/adult.data")
+test_data <- read_csv("Users/vrb/Downloads/census+income/adult.test")
+head(data)
