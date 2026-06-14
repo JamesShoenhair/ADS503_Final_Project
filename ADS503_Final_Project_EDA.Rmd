@@ -6,7 +6,7 @@ output: html_notebook
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
-
+Install Packages - James
 ```{r setup, message=FALSE, warning=FALSE}
 #Libraries
 library(readxl)
@@ -19,13 +19,14 @@ library(here)
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+EDA and Preprocessing - James
 ```{r}
 
 #Preprocessing
 #Load File
 
-df <- read_excel("/Users/jamesshoenhair/Documents/ADS503FinalProject_Mice_Protein_Expression/Data_Cortex_Nuclear.xls")
-
+#James Directory:  df <- read_excel("/Users/jamesshoenhair/Documents/ADS503FinalProject_Mice_Protein_Expression/Data_Cortex_Nuclear.xls")
+df <- read_excel("Data_Cortex_Nuclear.xls") #Veronica Directory
 
 dim(df)          # 1080 rows, 82 columns
 head(df)
@@ -52,7 +53,7 @@ df_imputed <- df %>%
 
 ```
 
-
+EDA and Pre-processing - James
 ```{r}
 #Exploratory Data Analysis (EDA)
 #Updated Summary Statistics
@@ -90,7 +91,93 @@ corrplot(cor(numeric_cols, use = "complete.obs"),
          method = "color", tl.cex = 0.4, order = "hclust")
 
 ```
+KNN Imputation - Veronica
+```{r}
+# Perform KNN imputation as new data set
+install.packages("VIM"); library(VIM)
+knn_imputed <- kNN(df, imp_var = FALSE)
 
+# Compare Variable Correlations Between KNN and Median Imputation
+numeric_med <- df_imputed[, sapply(df_imputed, is.numeric)]
+cor_med <- cor(
+  numeric_med,
+  use = "pairwise.complete.obs"
+)
+cor_med <- as.data.frame(round(cor_med, 2))
+knitr::kable(cor_med) # Median Imputation Correlation table
+numeric_knn <- knn_imputed[, sapply(knn_imputed, is.numeric)]
+cor_knn <- cor(
+  numeric_knn,
+  use = "pairwise.complete.obs"
+)
+cor_knn <- as.data.frame(round(cor_knn, 2))
+knitr::kable(cor_knn) # KNN Imputation correlation table
+
+# Slight differences in correlations: both methods can be inputted into models -> choose imputation method with best predictive outcome
+```
+Feature Selection - Veronica
+```{r}
+# Separate Predictors and Target for both datasets
+y_knn <- knn_imputed$class
+x_knn <- knn_imputed[, names(knn_imputed) != "class"]
+y_med <- df_imputed$class
+x_med <- df_imputed[, names(df_imputed) != "class"]
+
+# Remove Mouse ID (not valuable)
+x_knn <- x_knn[, names(x_knn) != "MouseID"]
+x_med <- x_med[, names(x_med) != "MouseID"]
+
+# One-Hot Encode Categorical Variables: Genotype, Treatment, and Behavior
+dummies_knn <- model.matrix(~ Genotype + Treatment + Behavior - 1, data = x_knn)
+dummies_med <- model.matrix(~ Genotype + Treatment + Behavior - 1, data = x_med)
+x_knn <- cbind(x_knn[, !names(x_knn) %in% c("Genotype", "Treatment", "Behavior")], dummies_knn)
+x_med <- cbind(x_med[, !names(x_med) %in% c("Genotype", "Treatment", "Behavior")], dummies_med)
+
+# Validate One-Hot Encoding (Make sure we only have numerical variables)
+str(x_knn)
+str(x_med)
+
+# Identify Near-Zero Variance Predictors
+nzv_knn <- nearZeroVar(x_knn)
+nzv_med <- nearZeroVar(x_med)
+length(nzv_knn)
+length(nzv_med) # There are no NZV predictors
+
+# Identify and remove High Correlations 
+cor_mat <- cor(x_med)
+cor_mat_knn <- cor(x_knn)
+high_med <- findCorrelation(cor_mat, cutoff = 0.90)
+high_knn <- findCorrelation(cor_mat, cutoff = 0.90)
+x_knn <- x_knn[, -high_knn]
+x_med <- x_med[, -high_med]
+length(x_knn)
+length(x_med) # Reduced from 81 to 74 predictors
+```
+
+Cross-Validation/Test Train Split - Ramin
+```{r}
+
+```
+Penalized Regression Models: Ridge, Lasso, & Elastic Net - Ramin
+```{r}
+
+```
+Tree-Based Models: Random Forest & Gradient Boosting - Stephanie
+```{r}
+
+```
+Logistic Regression & MARS - Veronica
+```{r}
+
+```
+Evaluation Comparison Table - Veronica
+```{r}
+
+```
+AUC-ROC Plot - Veronica
+```{r}
+
+```
 When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
 
 The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
