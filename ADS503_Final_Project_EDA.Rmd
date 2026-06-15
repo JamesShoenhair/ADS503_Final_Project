@@ -156,11 +156,90 @@ length(x_med) # Reduced from 81 to 74 predictors
 
 Cross-Validation/Test Train Split - Ramin
 ```{r}
+# ---- Targets (pulled from the cleaned data the team built) ----
+y_med <- factor(make.names(as.character(df_imputed$class)))
+y_knn <- factor(make.names(as.character(knn_imputed$class)))
 
+# ---- Remove label-defining columns to prevent leakage ----
+# Genotype/Treatment/Behavior literally define the 8 class labels,
+# so we predict from the protein features only.
+drop_pattern <- "Genotype|Treatment|Behavior"
+x_med <- x_med[, !grepl(drop_pattern, names(x_med))]
+x_knn <- x_knn[, !grepl(drop_pattern, names(x_knn))]
+
+# ---- Shared stratified 80/20 split (same rows for both versions) ----
+set.seed(503)
+train_idx <- createDataPartition(y_med, p = 0.80, list = FALSE)
+
+xtr_med <- x_med[train_idx, ];  ytr_med <- y_med[train_idx]
+xte_med <- x_med[-train_idx, ]; yte_med <- y_med[-train_idx]
+xtr_knn <- x_knn[train_idx, ];  ytr_knn <- y_knn[train_idx]
+xte_knn <- x_knn[-train_idx, ]; yte_knn <- y_knn[-train_idx]
+
+# ---- Shared 5-fold CV control (class probs on, for ROC later) ----
+ctrl <- trainControl(
+  method = "cv",
+  number = 5,
+  classProbs = TRUE,
+  summaryFunction = multiClassSummary,
+  savePredictions = "final"
+)
+
+cat("Predictors after leakage removal:", ncol(x_med), "\n")
+cat("Train rows:", nrow(xtr_med), "| Test rows:", nrow(xte_med), "\n")
 ```
+
+
 Penalized Regression Models: Ridge, Lasso, & Elastic Net - Ramin
 ```{r}
+library(pROC)
 
+# Train Ridge, Lasso, Elastic Net on a given training set
+fit_penalized <- function(xtr, ytr) {
+  ridge <- train(x = xtr, y = ytr, method = "glmnet", metric = "Accuracy",
+    trControl = ctrl, preProcess = c("center","scale"),
+    tuneGrid = expand.grid(alpha = 0, lambda = 10^seq(-4, 1, length = 30)))
+
+  lasso <- train(x = xtr, y = ytr, method = "glmnet", metric = "Accuracy",
+    trControl = ctrl, preProcess = c("center","scale"),
+    tuneGrid = expand.grid(alpha = 1, lambda = 10^seq(-4, 1, length = 30)))
+
+  enet <- train(x = xtr, y = ytr, method = "glmnet", metric = "Accuracy",
+    trControl = ctrl, preProcess = c("center","scale"),
+    tuneGrid = expand.grid(alpha = seq(0.1, 0.9, by = 0.2),
+                           lambda = 10^seq(-4, 1, length = 20)))
+
+  list(Ridge = ridge, Lasso = lasso, ElasticNet = enet)
+}
+
+set.seed(503)
+models_med <- fit_penalized(xtr_med, ytr_med)
+models_knn <- fit_penalized(xtr_knn, ytr_knn)
+
+# Evaluate on held-out test set -> tidy metrics row
+eval_model <- function(model, xte, yte, name, impute) {
+  pred  <- predict(model, xte)
+  probs <- predict(model, xte, type = "prob")
+  acc   <- mean(pred == yte)
+  auc   <- as.numeric(multiclass.roc(yte, as.matrix(probs))$auc)
+  data.frame(Model = name, Imputation = impute,
+             Accuracy = round(acc, 4), AUC = round(auc, 4))
+}
+
+results_penalized <- rbind(
+  eval_model(models_med$Ridge,      xte_med, yte_med, "Ridge",       "Median"),
+  eval_model(models_med$Lasso,      xte_med, yte_med, "Lasso",       "Median"),
+  eval_model(models_med$ElasticNet, xte_med, yte_med, "Elastic Net", "Median"),
+  eval_model(models_knn$Ridge,      xte_knn, yte_knn, "Ridge",       "KNN"),
+  eval_model(models_knn$Lasso,      xte_knn, yte_knn, "Lasso",       "KNN"),
+  eval_model(models_knn$ElasticNet, xte_knn, yte_knn, "Elastic Net", "KNN")
+)
+
+print(results_penalized)
+
+best <- results_penalized[which.max(results_penalized$Accuracy), ]
+cat("\nBest penalized model:", best$Model, "on", best$Imputation,
+    "imputation | Accuracy =", best$Accuracy, "| AUC =", best$AUC, "\n")
 ```
 Tree-Based Models: Random Forest & Gradient Boosting - Stephanie
 ```{r}
