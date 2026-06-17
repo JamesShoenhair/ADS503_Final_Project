@@ -6,7 +6,7 @@ output: html_notebook
 This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
 
 Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
-Install Packages - James
+Install Packages 
 ```{r setup, message=FALSE, warning=FALSE}
 #Libraries
 library(readxl)
@@ -127,13 +127,11 @@ x_med <- df_imputed[, names(df_imputed) != "class"]
 x_knn <- x_knn[, names(x_knn) != "MouseID"]
 x_med <- x_med[, names(x_med) != "MouseID"]
 
-# One-Hot Encode Categorical Variables: Genotype, Treatment, and Behavior
-dummies_knn <- model.matrix(~ Genotype + Treatment + Behavior - 1, data = x_knn)
-dummies_med <- model.matrix(~ Genotype + Treatment + Behavior - 1, data = x_med)
-x_knn <- cbind(x_knn[, !names(x_knn) %in% c("Genotype", "Treatment", "Behavior")], dummies_knn)
-x_med <- cbind(x_med[, !names(x_med) %in% c("Genotype", "Treatment", "Behavior")], dummies_med)
+# Remove Genotype, Treatment, and Behavior (These are used to define the classes which are combinations of all three targets)
+x_med <- x_med[, !(names(x_med) %in% c("Genotype", "Treatment", "Behavior"))]
+x_knn <- x_knn[, !(names(x_knn) %in% c("Genotype", "Treatment", "Behavior"))]
 
-# Validate One-Hot Encoding (Make sure we only have numerical variables)
+# Validate DataTypes (make sure all are numeric)
 str(x_knn)
 str(x_med)
 
@@ -146,12 +144,13 @@ length(nzv_med) # There are no NZV predictors
 # Identify and remove High Correlations 
 cor_mat <- cor(x_med)
 cor_mat_knn <- cor(x_knn)
-high_med <- findCorrelation(cor_mat, cutoff = 0.90)
+high_med <- findCorrelation(cor_mat, cutoff = 0.90) # removes variables until all pair-wise correlations are below |0.9|
 high_knn <- findCorrelation(cor_mat, cutoff = 0.90)
 x_knn <- x_knn[, -high_knn]
 x_med <- x_med[, -high_med]
 length(x_knn)
-length(x_med) # Reduced from 81 to 74 predictors
+length(x_med) # Reduced from 77 to 71
+
 ```
 
 Cross-Validation/Test Train Split - Ramin
@@ -245,8 +244,72 @@ Tree-Based Models: Random Forest & Gradient Boosting - Stephanie
 ```{r}
 
 ```
-Logistic Regression & MARS - Veronica
+Logistic Regression & MARS - Veronica INCOMPLETE
 ```{r}
+library(nnet)
+library(caret)
+library(earth)
+## MARS
+# Additional Pre-processing needed:
+# Combine X and Y Train into one dataset
+train_med_mars <- cbind(xtr_med, class = ytr_med)
+train_knn_mars <- cbind(xtr_knn, class = ytr_knn)
+
+# Fit MARS into training data
+mars_med <- earth(class ~ ., data = train_med_mars)
+mars_knn <- earth(class ~ ., data = train_knn_mars)
+
+# Predict test classes with fitted MARS model
+pred_med <- predict(mars_med, newdata = xte_med)
+pred_knn <- predict(mars_knn, newdata = xte_knn)
+
+# Get evaluation metrics
+mean(pred_med == yte_med) # accuracy
+mean(pred_knn == yte_knn) 
+
+# STILL NEED TO GET AUC AND OTHER METRICS FOR BOTH MODELS
+
+## LOGISTIC REGRESSION
+# Additional Pre-processing Needed:
+# Learn means and standard deviations from training data only
+pp_med <- preProcess(xtr_med, method = c("center", "scale"))
+pp_knn <- preProcess(xtr_knn, method = c("center", "scale"))
+
+# Apply to training data
+xtr_med_scaled <- predict(pp_med, xtr_med)
+xtr_knn_scaled <- predict(pp_knn, xtr_knn)
+
+# Apply to test data
+xts_med_scaled <- predict(pp_med, xte_med)
+xts_knn_scaled <- predict(pp_knn, xte_knn)
+
+# Combine X and Y Train into one dataset
+train_med_lr <- cbind(xtr_med_scaled, class = ytr_med)
+train_knn_lr <- cbind(xtr_knn_scaled, class = ytr_knn)
+
+# Make sure it matches the original training set size
+nrow(train_med_lr)
+nrow(train_knn_lr)
+
+# Make sure class is factored
+train_med_lr$class <- as.factor(train_med_lr$class)
+train_knn_lr$class <- as.factor(train_knn_lr$class)
+
+# Fit Multinomial Logistic Regression Model on Training Data
+lrmodel_med <- multinom(class ~ ., data = train_med_lr) # final loss is very low, converged
+lrmodel_knn <- multinom(class ~ ., data = train_knn_lr) # final loss is very low, converged
+
+# Test the Model on Test Data
+pred_knn <- predict(lrmodel_knn, newdata = xts_knn_scaled)
+pred_med <- predict(lrmodel_med, newdata = xts_med_scaled)
+
+# Evaluate Results of Logistic Regression
+print("Logistic Regression Model Results using KNN Imputation\n")
+mean(pred_knn == yte_knn)
+table(pred_knn, yte_knn) # Accuracy is slightly higher using KNN
+print("Logistic Regression Model Results using Median Imputation\n")
+mean(pred_med == yte_med)
+table(pred_med, yte_med)
 
 ```
 Evaluation Comparison Table - Veronica
