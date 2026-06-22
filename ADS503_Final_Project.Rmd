@@ -276,12 +276,27 @@ rf_knn <- train(
   importance = TRUE
 )
 
-
+# Predictions
 rf_pred_med <- predict(rf_med, xte_med)
 rf_pred_knn <- predict(rf_knn, xte_knn)
 
 rf_prob_med <- predict(rf_med, xte_med, type = "prob")
 rf_prob_knn <- predict(rf_knn, xte_knn, type = "prob")
+
+# Accuracy
+mean(rf_pred_med == yte_med)
+mean(rf_pred_knn == yte_knn)
+
+# Confusion matrices
+confusionMatrix(rf_pred_med, yte_med)
+confusionMatrix(rf_pred_knn, yte_knn)
+
+# Multiclass AUC
+rf_auc_med <- multiclass.roc(yte_med, as.matrix(rf_prob_med))$auc
+rf_auc_knn <- multiclass.roc(yte_knn, as.matrix(rf_prob_knn))$auc
+
+rf_auc_med
+rf_auc_knn
 
 # Variable importance
 varImpPlot(rf_med$finalModel, n.var = 15,
@@ -289,6 +304,8 @@ varImpPlot(rf_med$finalModel, n.var = 15,
 varImpPlot(rf_knn$finalModel, n.var = 15,
            main = "Top 15 RF Variable Importance - KNN Imputation")
 
+rf_med$bestTune
+rf_knn$bestTune
 
 #Gradient Boosting
 set.seed(503)
@@ -416,6 +433,14 @@ log_prob_med <- predict(lrmodel_med,newdata = xts_med_scaled,type = "probs")
 
 log_prob_knn <- predict(lrmodel_knn,newdata = xts_knn_scaled,type = "probs")
 
+# Predicted classes
+log_pred_med <- predict(lrmodel_med, newdata = xts_med_scaled, type = "class")
+log_pred_knn <- predict(lrmodel_knn, newdata = xts_knn_scaled, type = "class")
+
+# Match factor levels to test outcome
+log_pred_med <- factor(log_pred_med, levels = levels(yte_med))
+log_pred_knn <- factor(log_pred_knn, levels = levels(yte_knn))
+
 log_prob_med <- as.data.frame(log_prob_med)
 log_prob_knn <- as.data.frame(log_prob_knn)
 
@@ -432,6 +457,7 @@ table(log_pred_med, yte_med)
 Evaluation Comparison Table - Veronica/Stephanie
 ```{r}
 
+# get results
 ridge_pred_med <- predict(models_med$Ridge, xte_med)
 ridge_prob_med <- predict(models_med$Ridge, xte_med, type = "prob")
 
@@ -450,8 +476,7 @@ enet_prob_med <- predict(models_med$ElasticNet, xte_med, type = "prob")
 enet_pred_knn <- predict(models_knn$ElasticNet, xte_knn)
 enet_prob_knn <- predict(models_knn$ElasticNet, xte_knn, type = "prob")
 
-# get results
-# ---- Evaluation Comparison Table ----
+# Evaluation Comparison Table
 
 get_metrics <- function(model, pred, prob, truth, imp){
 
@@ -566,5 +591,122 @@ legend(
 )
 
 ```
+Additional Evaluation Metrics - Stephanie
+```{r}
+
+#CV Performance
 
 
+get_cv_metrics <- function(model, model_name, imputation) {
+  best <- model$bestTune
+  
+  cv_results <- model$results
+  
+  for (col in names(best)) {
+    cv_results <- cv_results[cv_results[[col]] == best[[col]], ]
+  }
+  
+  data.frame(
+    Model = model_name,
+    Imputation = imputation,
+    CV_Accuracy = cv_results$Accuracy,
+    CV_Kappa = cv_results$Kappa,
+    CV_LogLoss = ifelse("logLoss" %in% names(cv_results), cv_results$logLoss, NA),
+    CV_AUC = ifelse("AUC" %in% names(cv_results), cv_results$AUC, NA)
+  )
+}
+
+cv_results <- bind_rows(
+  get_cv_metrics(models_med$Ridge, "Ridge", "Median"),
+  get_cv_metrics(models_knn$Ridge, "Ridge", "KNN"),
+  
+  get_cv_metrics(models_med$Lasso, "Lasso", "Median"),
+  get_cv_metrics(models_knn$Lasso, "Lasso", "KNN"),
+  
+  get_cv_metrics(models_med$ElasticNet, "Elastic Net", "Median"),
+  get_cv_metrics(models_knn$ElasticNet, "Elastic Net", "KNN"),
+  
+  get_cv_metrics(rf_med, "Random Forest", "Median"),
+  get_cv_metrics(rf_knn, "Random Forest", "KNN"),
+  
+  get_cv_metrics(gbm_med, "Gradient Boosting", "Median"),
+  get_cv_metrics(gbm_knn, "Gradient Boosting", "KNN")
+)
+
+cv_results %>%
+  mutate(across(where(is.numeric), round, 4)) %>%
+  arrange(desc(CV_Accuracy), CV_LogLoss) %>%
+  kable(caption = "Cross-Validated Model Performance")
+
+```
+Final Model Coeff. - Stephanie
+```{r}
+
+# Chosen model: Elastic Net with KNN imputation
+
+# Check best tuning parameters
+models_knn$ElasticNet$bestTune
+
+# Extract coefficients from final Elastic Net model using best lambda
+coef_enet_knn <- coef(
+  models_knn$ElasticNet$finalModel,
+  s = models_knn$ElasticNet$bestTune$lambda
+)
+
+# Function to extract nonzero coefficients from multiclass glmnet model
+extract_enet_vars <- function(coef_list, imputation) {
+  
+  bind_rows(lapply(names(coef_list), function(class_name) {
+    
+    coef_mat <- as.matrix(coef_list[[class_name]])
+    
+    data.frame(
+      Class = class_name,
+      Variable = rownames(coef_mat),
+      Coefficient = coef_mat[, 1],
+      Imputation = imputation,
+      stringsAsFactors = FALSE
+    )
+  })) %>%
+    filter(
+      Variable != "(Intercept)",
+      Coefficient != 0
+    ) %>%
+    mutate(Abs_Coefficient = abs(Coefficient)) %>%
+    arrange(desc(Abs_Coefficient))
+}
+
+# Extract all nonzero coefficients
+enet_vars_knn <- extract_enet_vars(coef_enet_knn, "KNN")
+
+# View 
+enet_vars_knn
+
+# Count how many unique predictors were selected
+enet_vars_knn %>%
+  distinct(Variable) %>%
+  summarise(Number_Selected_Predictors = n())
+
+# Top 20 strongest predictors overall
+top_enet_knn <- enet_vars_knn %>%
+  group_by(Variable) %>%
+  summarise(
+    Max_Abs_Coefficient = max(Abs_Coefficient),
+    Classes_Selected_For = paste(unique(Class), collapse = ", "),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(Max_Abs_Coefficient)) %>%
+  slice_head(n = 20)
+
+# View top 20
+top_enet_knn
+
+# table
+top_enet_knn %>%
+  mutate(Max_Abs_Coefficient = round(Max_Abs_Coefficient, 4)) %>%
+  kable(
+    caption = "Top 20 Elastic Net Predictors Using KNN Imputation"
+  )
+
+
+```
