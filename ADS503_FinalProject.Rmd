@@ -1,0 +1,48 @@
+---
+title: "ADS503 Final Project"
+author: "Stephanie Smith, James Shoenhair, Ramin Fazli, Veronica Burke"
+date: "2026-06-05"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Load Data & Gather Preliminary Information
+
+```{r}
+# Load Census Income Data
+data <- data.frame(read_csv("./census-income/adult.data", col_names = FALSE))
+# Make sure test data comes in tabular format
+test_data <- read.csv(text = "./census-income/adult.test", delim = ",", col_names = FALSE, trim_ws = TRUE)
+head(data)
+head(test_data)
+
+# Data has no headers, so these will be created based on the UCI ML Repository dataset information
+library(dplyr)
+data <- data %>%
+  rename(
+    age = X1,
+    workclass = X2,
+    fnlwgt = X3,
+    education = X4,
+    education_num = X5,
+    marital_status = X6,
+    occupation = X7,
+    relationship = X8,
+    race = X9,
+    sex = X10,
+    capital_gain = X11,
+    capital_loss = X12,
+    hours_per_week = X13,
+    native_country = X14,
+    income = X15
+  )
+head(data)
+```
+```{r}
+# Get number of nulls in each column
+colSums(is.na(data))
+nrow(data)
+```
