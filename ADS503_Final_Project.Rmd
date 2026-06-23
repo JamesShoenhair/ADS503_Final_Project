@@ -23,7 +23,7 @@ library(VIM)
 library(knitr)
 ```
 
-EDA and Preprocessing - James
+EDA and Pre-Processing
 ```{r}
 
 #Preprocessing
@@ -59,7 +59,7 @@ df_imputed <- df %>%
 
 ```
 
-EDA and Pre-processing - James
+EDA and Pre-processing
 ```{r}
 #Exploratory Data Analysis (EDA)
 #Updated Summary Statistics
@@ -97,11 +97,9 @@ corrplot(cor(numeric_cols, use = "complete.obs"),
          method = "color", tl.cex = 0.4, order = "hclust")
 
 ```
-KNN Imputation - Veronica
+KNN Imputation 
 ```{r}
 # Perform KNN imputation as new data set
-#install.packages("VIM");
-
 knn_imputed <- kNN(df, imp_var = FALSE)
 
 # Compare Variable Correlations Between KNN and Median Imputation
@@ -122,7 +120,7 @@ knitr::kable(cor_knn) # KNN Imputation correlation table
 
 # Slight differences in correlations: both methods can be inputted into models -> choose imputation method with best predictive outcome
 ```
-Feature Selection - Veronica
+Feature Selection 
 ```{r}
 # Separate Predictors and Target for both datasets
 y_knn <- knn_imputed$class
@@ -160,7 +158,7 @@ length(x_med) # Reduced from 77 to 71
 
 ```
 
-Cross-Validation/Test Train Split - Ramin
+Cross-Validation/Test Train Split 
 ```{r}
 # ---- Targets (pulled from the cleaned data the team built) ----
 y_med <- factor(make.names(as.character(df_imputed$class)))
@@ -196,8 +194,8 @@ cat("Train rows:", nrow(xtr_med), "| Test rows:", nrow(xte_med), "\n")
 ```
 
 
-Penalized Regression Models: Ridge, Lasso, & Elastic Net - Ramin
-```{r}
+Penalized Regression Models: Ridge, Lasso, & Elastic Net 
+```{r warning=FALSE}
 
 # Train Ridge, Lasso, Elastic Net on a given training set
 fit_penalized <- function(xtr, ytr) {
@@ -246,7 +244,7 @@ best <- results_penalized[which.max(results_penalized$Accuracy), ]
 cat("\nBest penalized model:", best$Model, "on", best$Imputation,
     "imputation | Accuracy =", best$Accuracy, "| AUC =", best$AUC, "\n")
 ```
-Tree-Based Models: Random Forest & Gradient Boosting - Stephanie
+Tree-Based Models: Random Forest & Gradient Boosting 
 ```{r}
 
 # Random Forest Models
@@ -360,7 +358,7 @@ confusionMatrix(gbm_pred_knn, yte_knn)
 
 
 ```
-Logistic Regression & MARS - Veronica INCOMPLETE
+Logistic Regression & MARS 
 ```{r}
 
 ## MARS
@@ -454,7 +452,7 @@ mean(log_pred_med == yte_med)
 table(log_pred_med, yte_med)
 
 ```
-Evaluation Comparison Table - Veronica/Stephanie
+Evaluation Comparison Table
 ```{r}
 
 # get results
@@ -522,7 +520,7 @@ results %>%
   arrange(desc(Accuracy), desc(AUC)) %>%
   kable(caption = "Performance Comparison of Classification Models")
 ```
-AUC-ROC Plot - Veronica/Stephanie
+AUC-ROC Plot 
 ```{r}
 
 target_class <- "c.CS.m"
@@ -591,7 +589,7 @@ legend(
 )
 
 ```
-Additional Evaluation Metrics - Stephanie
+Additional Evaluation Metrics 
 ```{r}
 
 #CV Performance
@@ -639,7 +637,7 @@ cv_results %>%
   kable(caption = "Cross-Validated Model Performance")
 
 ```
-Final Model Coeff. - Stephanie
+Final Model Coeff. 
 ```{r}
 
 # Chosen model: Elastic Net with KNN imputation
